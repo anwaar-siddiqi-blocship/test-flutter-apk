@@ -1,0 +1,63 @@
+name: Flutter Build & Artifact Link with App Name
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: "stable"
+
+    - name: Install Dependencies
+      run: flutter pub get
+
+    - name: Get App Name, Version & Build Number
+      id: get_info
+      run: |
+        APP_NAME="MyApp"  # yahan apna app name likho
+        VERSION_NAME=$(grep 'version:' pubspec.yaml | sed 's/version: *\([0-9.]*\)+[0-9]*/\1/')
+        BUILD_NUMBER=$(grep 'version:' pubspec.yaml | sed 's/.*+\([0-9]*\)/\1/')
+        FILENAME="$APP_NAME-$VERSION_NAME+$BUILD_NUMBER.apk"
+        echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+        echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+        echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+        echo "APK_FILENAME=$FILENAME" >> $GITHUB_ENV
+        echo "Building APK: $FILENAME"
+
+    - name: Build APK
+      run: flutter build apk --release --build-name=$VERSION_NAME --build-number=$BUILD_NUMBER
+
+    - name: Rename APK
+      run: |
+        mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/$APK_FILENAME
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: $APK_FILENAME
+        path: build/app/outputs/flutter-apk/$APK_FILENAME
+
+    - name: Send Artifact Link via Email
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.mailtrap.io
+        server_port: 587
+        username: ${{ secrets.MAILTRAP_USER }}
+        password: ${{ secrets.MAILTRAP_PASS }}
+        subject: "Flutter APK Build $APP_NAME-$VERSION_NAME+$BUILD_NUMBER"
+        body: |
+          Hello! New APK build is ready.  
+          APK: $APP_NAME-$VERSION_NAME+$BUILD_NUMBER.apk  
+          Download artifact: ${{ github.server_url }}/${{ github.repository }}/suites/${{ github.run_id }}/artifacts
+        to: "anwaar.siddiqi@blocship.io"
+        from: "build@myapp.com"
